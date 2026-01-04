@@ -53,7 +53,7 @@ struct SectionHeader: View {
 #Preview("With Action") {
     SectionHeader(
         title: "Activity",
-        action: { print("Tapped") },
+        action: {},
         actionLabel: "View Details"
     )
     .padding()
@@ -63,7 +63,7 @@ struct SectionHeader: View {
     SectionHeader(
         title: "Analytics Dashboard",
         subtitle: "Updated just now",
-        action: { print("Tapped") },
+        action: {},
         actionLabel: "Refresh"
     )
     .padding()

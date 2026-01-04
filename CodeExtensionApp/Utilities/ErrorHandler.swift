@@ -237,44 +237,6 @@ struct LoadingView: View {
     }
 }
 
-// MARK: - Empty State View
-
-/// A view for displaying empty states with icon, title, and subtitle.
-struct EmptyStateView: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    var action: (() -> Void)?
-    var actionTitle: String?
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
-
-            VStack(spacing: 4) {
-                Text(title)
-                    .font(.headline)
-
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            if let action, let actionTitle {
-                Button(actionTitle) {
-                    action()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
 // MARK: - Preview
 
 #Preview("Error Banner") {
@@ -292,14 +254,4 @@ struct EmptyStateView: View {
 
 #Preview("Loading View") {
     LoadingView(message: "Loading sessions...")
-}
-
-#Preview("Empty State") {
-    EmptyStateView(
-        icon: "terminal",
-        title: "No Active Sessions",
-        subtitle: "Claude Code sessions will appear here when running.",
-        action: {},
-        actionTitle: "Refresh"
-    )
 }

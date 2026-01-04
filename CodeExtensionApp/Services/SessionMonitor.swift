@@ -21,8 +21,11 @@ class SessionMonitor: ObservableObject {
     @Published var lastError: String?
 
     private var timer: Timer?
+    private let claudeDir: URL
 
-    private init() {}
+    private init() {
+        claudeDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+    }
 
     // MARK: - Start/Stop Monitoring
 
@@ -60,7 +63,9 @@ class SessionMonitor: ObservableObject {
     // MARK: - Find Claude Sessions
 
     private func findClaudeSessions() -> [Session] {
-        // Use ps to find claude processes
+        var sessions: [Session] = []
+
+        // 1) Use ps to find running claude CLI processes
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/ps")
         task.arguments = ["-eo", "pid,comm"]  // Simple format: PID and command name
@@ -68,8 +73,6 @@ class SessionMonitor: ObservableObject {
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = FileHandle.nullDevice
-
-        var sessions: [Session] = []
 
         do {
             try task.run()
@@ -108,7 +111,44 @@ class SessionMonitor: ObservableObject {
             logger.error("Error finding claude sessions: \(error.localizedDescription, privacy: .public)")
         }
 
+        // 2) Add IDE sessions from ~/.claude/ide/*.lock
+        sessions.append(contentsOf: findIDESessions())
+
         return sessions
+    }
+
+    // MARK: - IDE Sessions (Cursor/IDE lock files)
+
+    private func findIDESessions() -> [Session] {
+        let ideDir = claudeDir.appendingPathComponent("ide")
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: ideDir.path) else { return [] }
+
+        do {
+            let lockFiles = try fm.contentsOfDirectory(at: ideDir, includingPropertiesForKeys: nil)
+                .filter { $0.pathExtension == "lock" }
+
+            return lockFiles.compactMap { lockURL in
+                guard let data = SecurityValidator.loadSecureData(from: lockURL) else { return nil }
+                guard let lock = try? JSONDecoder().decode(IDELockFile.self, from: data) else { return nil }
+
+                let workingDir = lock.workspaceFolders?.first ?? "Unknown"
+                let attrs = try? fm.attributesOfItem(atPath: lockURL.path)
+                let startTime = attrs?[.creationDate] as? Date
+
+                return Session(
+                    id: "ide-\(lockURL.lastPathComponent)",
+                    pid: lock.pid,
+                    workingDirectory: workingDir,
+                    startTime: startTime,
+                    model: nil,
+                    sessionType: .ide
+                )
+            }
+        } catch {
+            logger.debug("Error scanning IDE lock files: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
     }
 
     // MARK: - Get Working Directory via lsof

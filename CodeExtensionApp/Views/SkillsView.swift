@@ -103,59 +103,57 @@ struct SkillTreeItem: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Main skill row
-            Button {
-                selectedSkill = skill
-                selectedFile = nil
-            } label: {
-                HStack(spacing: 6) {
-                    // Expand/collapse button for skills with nested content
-                    if skill.hasNestedContent {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                isExpanded.toggle()
-                            }
-                        } label: {
-                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 9))
-                                .foregroundColor(.secondary)
-                                .frame(width: 12, height: 12)
+            HStack(spacing: 6) {
+                // Expand/collapse button for skills with nested content
+                if skill.hasNestedContent {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isExpanded.toggle()
                         }
-                        .buttonStyle(.plain)
-                    } else {
-                        Spacer()
-                            .frame(width: 12)
-                    }
-
-                    Image(systemName: "wand.and.stars")
-                        .foregroundColor(.purple)
-                        .frame(width: 14)
-
-                    Text(skill.name)
-                        .font(.subheadline)
-                        .fontWeight(isSelected ? .semibold : .regular)
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    if skill.hasNestedContent {
-                        Text("\(skill.nestedFolders.count)")
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9))
                             .foregroundColor(.secondary)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.secondary.opacity(0.2))
-                            .clipShape(Capsule())
+                            .frame(width: 12, height: 12)
                     }
+                    .buttonStyle(.plain)
+                } else {
+                    Spacer()
+                        .frame(width: 12)
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
-                )
-                .contentShape(Rectangle())
+
+                Image(systemName: "wand.and.stars")
+                    .foregroundColor(.purple)
+                    .frame(width: 14)
+
+                Text(skill.name)
+                    .font(.subheadline)
+                    .fontWeight(isSelected ? .semibold : .regular)
+                    .lineLimit(1)
+
+                Spacer()
+
+                if skill.hasNestedContent {
+                    Text("\(skill.nestedFolders.count)")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.2))
+                        .clipShape(Capsule())
+                }
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedSkill = skill
+                selectedFile = nil
+            }
 
             // Nested folders
             if isExpanded && skill.hasNestedContent {

@@ -41,6 +41,8 @@ struct SettingsView: View {
             // Content
             if let subPage = navigationState.settingsSubPage {
                 switch subPage {
+                case .scanPaths:
+                    ScanPathsSubView()
                 case .permissions:
                     PermissionsSubView()
                 case .claudeMD:
@@ -62,6 +64,7 @@ struct SettingsView: View {
 struct SettingsMenuView: View {
     @EnvironmentObject var configManager: ConfigManager
     @EnvironmentObject var navigationState: NavigationState
+    @EnvironmentObject var preferences: AppPreferences
     @State private var showRetryBanner = false
 
     var permissionCount: String {
@@ -80,6 +83,13 @@ struct SettingsMenuView: View {
             return "\(stats.totalSessions ?? 0) sessions, \(stats.totalMessages ?? 0) messages"
         }
         return "No stats available"
+    }
+
+    var scanPathsInfo: String {
+        let count = preferences.scanPaths.count
+        if count == 0 { return "No scan paths configured" }
+        if count == 1 { return preferences.scanPaths[0] }
+        return "\(count) paths"
     }
 
     var body: some View {
@@ -106,6 +116,15 @@ struct SettingsMenuView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 2) {
+                        SettingsRow(
+                            icon: "folder.badge.gearshape",
+                            title: "Scan Paths",
+                            subtitle: scanPathsInfo,
+                            color: .teal
+                        ) {
+                            navigationState.settingsSubPage = .scanPaths
+                        }
+
                         SettingsRow(
                             icon: "checkmark.shield",
                             title: "Permissions",
@@ -150,6 +169,110 @@ struct SettingsMenuView: View {
             if newError != nil {
                 showRetryBanner = true
             }
+        }
+    }
+}
+
+// MARK: - Scan Paths Sub-View
+
+struct ScanPathsSubView: View {
+    @EnvironmentObject var preferences: AppPreferences
+    @EnvironmentObject var projectScanner: ProjectScanner
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Toolbar
+            HStack(spacing: 12) {
+                Text("Folders to scan for projects")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                if projectScanner.isScanning {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+
+                Button {
+                    projectScanner.scan()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+
+                Button("Add Folder") {
+                    addFolder()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(12)
+
+            Divider()
+
+            if preferences.scanPaths.isEmpty {
+                EmptyStateView(
+                    icon: "folder",
+                    title: "No Scan Paths",
+                    subtitle: "Add one or more folders (e.g. ~/Dev) to discover projects.",
+                    action: { addFolder() },
+                    actionTitle: "Add Folder"
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 6) {
+                        ForEach(preferences.scanPaths.sortedCaseInsensitive(), id: \.self) { path in
+                            HStack(spacing: 10) {
+                                Image(systemName: "folder")
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 16)
+
+                                Text(path)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+
+                                Spacer()
+
+                                Button {
+                                    preferences.removeScanPath(path)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundColor(.red.opacity(0.8))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Remove")
+                            }
+                            .padding(10)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                    .padding(12)
+                }
+            }
+        }
+        .onAppear {
+            // Keep project list fresh after adding/removing paths.
+            if projectScanner.projects.isEmpty {
+                projectScanner.scan()
+            }
+        }
+    }
+
+    private func addFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Add"
+
+        if panel.runModal() == .OK {
+            for url in panel.urls {
+                preferences.addScanPath(url.path)
+            }
+            projectScanner.scan()
         }
     }
 }

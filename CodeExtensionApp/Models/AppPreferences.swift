@@ -62,6 +62,7 @@ class NavigationState: ObservableObject {
         case commands = "Commands"
         case hooks = "Hooks"
         case agents = "Agents"
+        case projects = "Projects"
         case settings = "Settings"
 
         var id: String { rawValue }
@@ -75,12 +76,14 @@ class NavigationState: ObservableObject {
             case .commands: return "command"
             case .hooks: return "arrow.triangle.branch"
             case .agents: return "person.2"
+            case .projects: return "folder"
             case .settings: return "gearshape"
             }
         }
     }
 
     enum SettingsPage: String, Identifiable {
+        case scanPaths = "Scan Paths"
         case permissions = "Permissions"
         case claudeMD = "CLAUDE.md"
         case mcpServers = "MCP Servers"

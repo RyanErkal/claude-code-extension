@@ -4,6 +4,8 @@ import SwiftUI
 struct CodeExtensionApp: App {
     @StateObject private var configManager = ConfigManager.shared
     @StateObject private var sessionMonitor = SessionMonitor.shared
+    @StateObject private var projectScanner = ProjectScanner.shared
+    @StateObject private var preferences = AppPreferences.shared
     @StateObject private var navigationState = NavigationState()
     @StateObject private var errorHandler = ErrorHandler.shared
 
@@ -12,6 +14,8 @@ struct CodeExtensionApp: App {
             MainContentView()
                 .environmentObject(configManager)
                 .environmentObject(sessionMonitor)
+                .environmentObject(projectScanner)
+                .environmentObject(preferences)
                 .environmentObject(navigationState)
                 .environmentObject(errorHandler)
                 .errorAlert()
@@ -27,6 +31,8 @@ struct CodeExtensionApp: App {
 struct MainContentView: View {
     @EnvironmentObject var configManager: ConfigManager
     @EnvironmentObject var sessionMonitor: SessionMonitor
+    @EnvironmentObject var projectScanner: ProjectScanner
+    @EnvironmentObject var preferences: AppPreferences
     @EnvironmentObject var navigationState: NavigationState
 
     var body: some View {
@@ -44,7 +50,8 @@ struct MainContentView: View {
         .frame(width: 750, height: 500)
         .onAppear {
             configManager.loadAll()
-            sessionMonitor.startMonitoring()
+            sessionMonitor.startMonitoring(interval: preferences.refreshInterval)
+            projectScanner.scan()
         }
     }
 }
@@ -55,6 +62,7 @@ struct SidebarView: View {
     @EnvironmentObject var navigationState: NavigationState
     @EnvironmentObject var configManager: ConfigManager
     @EnvironmentObject var sessionMonitor: SessionMonitor
+    @EnvironmentObject var projectScanner: ProjectScanner
 
     var body: some View {
         VStack(spacing: 0) {
@@ -129,6 +137,7 @@ struct SidebarView: View {
         case .commands: return configManager.globalCommands.count
         case .hooks: return configManager.globalSettings?.hooks?.values.flatMap { $0 }.count ?? 0
         case .agents: return 0
+        case .projects: return projectScanner.projects.count
         case .settings: return 0
         }
     }
@@ -201,6 +210,8 @@ struct DetailView: View {
                 HooksView()
             case .agents:
                 AgentsView()
+            case .projects:
+                ProjectsView()
             case .settings:
                 SettingsView()
             }
@@ -322,7 +333,7 @@ struct SessionCard: View {
 
             Spacer()
 
-            if session.pid != nil {
+            if session.pid != nil, session.sessionType == .process {
                 Button {
                     showingKillConfirm = true
                 } label: {

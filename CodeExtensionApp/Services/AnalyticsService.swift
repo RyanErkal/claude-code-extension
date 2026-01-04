@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os.log
 
 // MARK: - Analytics Service
 
@@ -10,12 +11,19 @@ class AnalyticsService: ObservableObject {
     @Published var selectedPeriod: TimePeriod = .week
     @Published var isLoading = false
 
-    private let statsFilePath: String
+    private let statsFileURL: URL
     private let dateFormatter: DateFormatter
 
+    private let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "CodeExtensionApp",
+        category: "AnalyticsService"
+    )
+
     private init() {
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-        self.statsFilePath = "\(homeDir)/.claude/stats-cache.json"
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        self.statsFileURL = home
+            .appendingPathComponent(".claude")
+            .appendingPathComponent("stats-cache.json")
 
         self.dateFormatter = DateFormatter()
         self.dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -43,18 +51,20 @@ class AnalyticsService: ObservableObject {
     // MARK: - Load Stats Cache
 
     private func loadStatsCache() -> EnhancedStatsCache? {
-        guard FileManager.default.fileExists(atPath: statsFilePath) else {
-            print("Stats cache file not found at: \(statsFilePath)")
+        guard FileManager.default.fileExists(atPath: statsFileURL.path) else {
+            logger.info("Stats cache file not found at: \(self.statsFileURL.path, privacy: .public)")
+            return nil
+        }
+
+        guard let data = SecurityValidator.loadSecureData(from: statsFileURL) else {
             return nil
         }
 
         do {
-            let url = URL(fileURLWithPath: statsFilePath)
-            let data = try Data(contentsOf: url)
-            let cache = try JSONDecoder().decode(EnhancedStatsCache.self, from: data)
-            return cache
+            return try JSONDecoder().decode(EnhancedStatsCache.self, from: data)
         } catch {
-            print("Error loading stats cache: \(error)")
+            logger.error("Error loading stats cache: \(error.localizedDescription, privacy: .public)")
+            ErrorHandler.shared.handle(error, context: "Loading Analytics")
             return nil
         }
     }

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os.log
 
 // MARK: - File Watcher
 
@@ -8,6 +9,11 @@ class FileWatcher: ObservableObject {
     private var fileDescriptors: [String: Int32] = [:]
 
     var onFileChanged: ((String) -> Void)?
+
+    private let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "CodeExtensionApp",
+        category: "FileWatcher"
+    )
 
     deinit {
         stopWatchingAll()
@@ -20,7 +26,7 @@ class FileWatcher: ObservableObject {
 
         let fd = open(path, O_EVTONLY)
         guard fd >= 0 else {
-            print("Failed to open file for watching: \(path)")
+            logger.debug("Failed to open file for watching: \(path, privacy: .public)")
             return
         }
 
@@ -50,17 +56,13 @@ class FileWatcher: ObservableObject {
         if let source = sources.removeValue(forKey: path) {
             source.cancel()
         }
-        if let fd = fileDescriptors.removeValue(forKey: path) {
-            close(fd)
-        }
+        fileDescriptors.removeValue(forKey: path)
     }
 
     func stopWatchingAll() {
         for (path, source) in sources {
             source.cancel()
-            if let fd = fileDescriptors[path] {
-                close(fd)
-            }
+            fileDescriptors.removeValue(forKey: path)
         }
         sources.removeAll()
         fileDescriptors.removeAll()

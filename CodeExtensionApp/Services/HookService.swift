@@ -94,11 +94,9 @@ final class HookService {
     /// - Parameter command: The full command (e.g., "bash ~/.claude/hooks/auto-format.sh")
     /// - Returns: The script content, or nil if not found or security validation fails
     func loadHookScriptContent(from command: String) -> String? {
-        // Parse script path from command like "bash ~/.claude/hooks/auto-format.sh"
-        let components = command.components(separatedBy: " ")
-        guard components.count >= 2 else { return nil }
-
-        let scriptPath = components.dropFirst().joined(separator: " ")
+        let args = parseShellArguments(command)
+        guard let scriptPathRaw = extractScriptPath(from: args) else { return nil }
+        let scriptPath = expandHomeEnvironmentVariables(in: scriptPathRaw)
 
         // SECURITY: Only allow loading scripts from ~/.claude directory
         let allowedDirectories = [claudeDir]
@@ -120,10 +118,9 @@ final class HookService {
     /// - Parameter command: The full command
     /// - Returns: URL to the script file, or nil if not parseable or security validation fails
     func getScriptURL(from command: String) -> URL? {
-        let components = command.components(separatedBy: " ")
-        guard components.count >= 2 else { return nil }
-
-        let scriptPath = components.dropFirst().joined(separator: " ")
+        let args = parseShellArguments(command)
+        guard let scriptPathRaw = extractScriptPath(from: args) else { return nil }
+        let scriptPath = expandHomeEnvironmentVariables(in: scriptPathRaw)
 
         // SECURITY: Only allow scripts from ~/.claude directory
         let allowedDirectories = [claudeDir]
@@ -178,5 +175,110 @@ final class HookService {
         }
 
         return nil
+    }
+
+    // MARK: - Command Parsing Helpers
+
+    /// Parses a shell-like command string into arguments (supports quotes and backslash escapes).
+    private func parseShellArguments(_ command: String) -> [String] {
+        var args: [String] = []
+        var current = ""
+        var inSingle = false
+        var inDouble = false
+        var isEscaping = false
+
+        for ch in command {
+            if isEscaping {
+                current.append(ch)
+                isEscaping = false
+                continue
+            }
+
+            if inSingle {
+                if ch == "'" {
+                    inSingle = false
+                } else {
+                    current.append(ch)
+                }
+                continue
+            }
+
+            if inDouble {
+                if ch == "\"" {
+                    inDouble = false
+                } else if ch == "\\" {
+                    isEscaping = true
+                } else {
+                    current.append(ch)
+                }
+                continue
+            }
+
+            switch ch {
+            case "'":
+                inSingle = true
+            case "\"":
+                inDouble = true
+            case "\\":
+                isEscaping = true
+            default:
+                if ch.isWhitespace {
+                    if !current.isEmpty {
+                        args.append(current)
+                        current = ""
+                    }
+                } else {
+                    current.append(ch)
+                }
+            }
+        }
+
+        if !current.isEmpty {
+            args.append(current)
+        }
+
+        return args
+    }
+
+    /// Attempts to extract a script path from a command invocation.
+    /// Supports common forms like:
+    /// - `bash ~/.claude/hooks/my-hook.sh`
+    /// - `~/.claude/hooks/my-hook.sh`
+    private func extractScriptPath(from args: [String]) -> String? {
+        guard let first = args.first else { return nil }
+        if args.count == 1 { return first }
+
+        let interpreter = URL(fileURLWithPath: first).lastPathComponent.lowercased()
+        let knownInterpreters: Set<String> = [
+            "bash", "sh", "zsh", "fish",
+            "python", "python3",
+            "node", "ruby", "perl"
+        ]
+
+        if knownInterpreters.contains(interpreter) {
+            // If the interpreter is executing inline code, we can't map to a file path reliably.
+            if args.contains("-c") || args.contains("-lc") {
+                return nil
+            }
+
+            // Find the first non-flag argument after the interpreter.
+            for arg in args.dropFirst() {
+                if arg.hasPrefix("-") { continue }
+                return arg
+            }
+            return nil
+        }
+
+        // Otherwise assume the first argument itself is a script/executable path.
+        return first
+    }
+
+    /// Expands a small subset of common environment variables in paths.
+    /// (Security validation is still applied after expansion.)
+    private func expandHomeEnvironmentVariables(in path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return path
+            .replacingOccurrences(of: "${HOME}", with: home)
+            .replacingOccurrences(of: "$HOME", with: home)
     }
 }

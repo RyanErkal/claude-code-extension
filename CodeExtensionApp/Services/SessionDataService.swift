@@ -70,8 +70,6 @@ class SessionDataService: ObservableObject {
                           isDirectory.boolValue else { continue }
 
                     let encodedPath = projectDir.lastPathComponent
-                    let projectPath = self.decodeProjectPath(encodedPath)
-                    let projectName = URL(fileURLWithPath: projectPath).lastPathComponent
 
                     // Find all .jsonl files in this project directory
                     let contents = try fm.contentsOfDirectory(at: projectDir, includingPropertiesForKeys: nil)
@@ -80,8 +78,7 @@ class SessionDataService: ObservableObject {
                     for jsonlFile in jsonlFiles {
                         if let stats = self.parseSessionFile(
                             at: jsonlFile,
-                            projectPath: projectPath,
-                            projectName: projectName
+                            encodedProjectPath: encodedPath
                         ) {
                             allStats.append(stats)
                         }
@@ -108,7 +105,7 @@ class SessionDataService: ObservableObject {
 
     // MARK: - Parse Session File
 
-    func parseSessionFile(at url: URL, projectPath: String, projectName: String) -> SessionStats? {
+    func parseSessionFile(at url: URL, encodedProjectPath: String) -> SessionStats? {
         guard let data = FileManager.default.contents(atPath: url.path),
               let content = String(data: data, encoding: .utf8) else {
             return nil
@@ -117,6 +114,7 @@ class SessionDataService: ObservableObject {
         let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
         guard !lines.isEmpty else { return nil }
 
+        var cwd: String?
         var firstTimestamp: Date?
         var lastTimestamp: Date?
         var messageCount = 0
@@ -130,6 +128,11 @@ class SessionDataService: ObservableObject {
             guard let lineData = line.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] else {
                 continue
+            }
+
+            // Capture project working directory (more reliable than decoding the folder name)
+            if cwd == nil, let cwdStr = json["cwd"] as? String, !cwdStr.isEmpty {
+                cwd = cwdStr
             }
 
             // Parse timestamp
@@ -176,10 +179,15 @@ class SessionDataService: ObservableObject {
         // Extract session ID from filename
         let sessionId = url.deletingPathExtension().lastPathComponent
 
+        let resolvedProjectPath = cwd ?? bestEffortDecodeEncodedProjectPath(encodedProjectPath)
+        let resolvedProjectName = URL(fileURLWithPath: resolvedProjectPath).lastPathComponent
+
         return SessionStats(
             id: sessionId,
-            projectPath: projectPath,
-            projectName: projectName,
+            projectPath: resolvedProjectPath,
+            projectName: resolvedProjectName,
+            encodedProjectPath: encodedProjectPath,
+            fileURL: url,
             startTime: firstTimestamp ?? Date(),
             endTime: lastTimestamp,
             duration: duration,
@@ -194,43 +202,26 @@ class SessionDataService: ObservableObject {
 
     // MARK: - Load Single Session
 
-    func loadSession(id: String, projectPath: String) -> SessionStats? {
-        let encodedPath = encodeProjectPath(projectPath)
+    func loadSession(id: String, encodedProjectPath: String) -> SessionStats? {
         let sessionFile = projectsDir
-            .appendingPathComponent(encodedPath)
+            .appendingPathComponent(encodedProjectPath)
             .appendingPathComponent("\(id).jsonl")
 
-        let projectName = URL(fileURLWithPath: projectPath).lastPathComponent
-
-        return parseSessionFile(at: sessionFile, projectPath: projectPath, projectName: projectName)
+        return parseSessionFile(at: sessionFile, encodedProjectPath: encodedProjectPath)
     }
 
-    // MARK: - Path Encoding/Decoding
+    // MARK: - Path Decoding (Best Effort)
 
-    /// Converts encoded path like "-Users-foo-bar" to "/Users/foo/bar"
-    func decodeProjectPath(_ encoded: String) -> String {
-        // Replace leading dash with slash, then all other dashes with slashes
+    /// Claude Code stores project sessions under `~/.claude/projects/<encoded>/...`.
+    /// The encoded directory name is not guaranteed to be unambiguous (e.g. projects with `-` in their names).
+    /// Prefer `cwd` parsed from the session JSONL; this method is a fallback only.
+    private func bestEffortDecodeEncodedProjectPath(_ encoded: String) -> String {
         var result = encoded
-
-        // Handle the leading dash (represents root /)
         if result.hasPrefix("-") {
-            result = "/" + result.dropFirst()
+            result.removeFirst()
+            result = "/" + result
         }
-
-        // Replace remaining dashes with slashes
-        result = result.replacingOccurrences(of: "-", with: "/")
-
-        return result
-    }
-
-    /// Converts path like "/Users/foo/bar" to encoded "-Users-foo-bar"
-    func encodeProjectPath(_ path: String) -> String {
-        var result = path
-
-        // Replace slashes with dashes
-        result = result.replacingOccurrences(of: "/", with: "-")
-
-        return result
+        return result.replacingOccurrences(of: "-", with: "/")
     }
 
     // MARK: - Timestamp Parsing

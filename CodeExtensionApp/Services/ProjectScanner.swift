@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AppKit
+import os.log
 
 // MARK: - Project Scanner
 
@@ -9,6 +10,11 @@ class ProjectScanner: ObservableObject {
 
     @Published var projects: [DiscoveredProject] = []
     @Published var isScanning = false
+
+    private let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "CodeExtensionApp",
+        category: "ProjectScanner"
+    )
 
     private let preferences = AppPreferences.shared
     private var cancellables = Set<AnyCancellable>()
@@ -110,7 +116,8 @@ class ProjectScanner: ObservableObject {
         do {
             try task.run()
         } catch {
-            print("Error opening VS Code: \(error)")
+            logger.error("Error opening VS Code: \(error.localizedDescription, privacy: .public)")
+            ErrorHandler.shared.handle(error, context: "Opening VS Code")
         }
     }
 

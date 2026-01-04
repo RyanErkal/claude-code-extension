@@ -52,14 +52,26 @@ class ConfigManager: ObservableObject {
     func loadAll() {
         isLoading = true
         lastError = nil
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
 
-        loadGlobalSettings()
-        loadGlobalMCPServers()
-        loadGlobalSkills()
-        loadGlobalCommands()
-        loadStatsCache()
+            let (settings, settingsError) = self.readGlobalSettings()
+            let mcpResult = self.mcpService.loadGlobalMCPServers()
+            let skills = self.skillService.loadGlobalSkills()
+            let commands = self.skillService.loadGlobalCommands()
+            let stats = self.readStatsCache()
 
-        isLoading = false
+            DispatchQueue.main.async {
+                self.globalSettings = settings
+                self.globalMCPServers = mcpResult.servers
+                self.globalSkills = skills
+                self.globalCommands = commands
+                self.statsCache = stats
+
+                self.lastError = settingsError ?? mcpResult.error
+                self.isLoading = false
+            }
+        }
     }
 
     // MARK: - Global MCP Servers
@@ -76,26 +88,10 @@ class ConfigManager: ObservableObject {
     // MARK: - Global Settings
 
     func loadGlobalSettings() {
-        guard FileManager.default.fileExists(atPath: settingsPath.path) else {
-            globalSettings = ClaudeSettings(
-                permissions: Permissions(allow: [], deny: [], ask: [])
-            )
-            return
-        }
-
-        // SECURITY: Validate file permissions before loading sensitive settings
-        guard let data = SecurityValidator.loadSecureData(from: settingsPath, errorHandler: { [weak self] error in
-            self?.lastError = error
-        }) else {
-            return
-        }
-
-        do {
-            globalSettings = try JSONDecoder().decode(ClaudeSettings.self, from: data)
-        } catch {
-            lastError = "Failed to load settings: \(error.localizedDescription)"
-            logger.error("Error loading settings: \(error.localizedDescription, privacy: .public)")
-            ErrorHandler.shared.handle(error, context: "Loading Settings")
+        let (settings, error) = readGlobalSettings()
+        globalSettings = settings
+        if let error {
+            lastError = error
         }
     }
 
@@ -176,17 +172,67 @@ class ConfigManager: ObservableObject {
     // MARK: - Stats Cache
 
     func loadStatsCache() {
-        guard FileManager.default.fileExists(atPath: statsCachePath.path) else { return }
+        statsCache = readStatsCache()
+    }
 
-        // SECURITY: Validate file permissions before loading cache
-        guard let data = SecurityValidator.loadSecureData(from: statsCachePath) else {
-            return
+    // MARK: - Internal Reads (Background-safe)
+
+    private func readGlobalSettings() -> (ClaudeSettings?, String?) {
+        guard FileManager.default.fileExists(atPath: settingsPath.path) else {
+            return (
+                ClaudeSettings(permissions: Permissions(allow: [], deny: [], ask: [])),
+                nil
+            )
+        }
+
+        var errorMessage: String?
+        guard let data = SecurityValidator.loadSecureData(from: settingsPath, errorHandler: { error in
+            errorMessage = error
+        }) else {
+            return (nil, errorMessage)
         }
 
         do {
-            statsCache = try JSONDecoder().decode(StatsCache.self, from: data)
+            return (try JSONDecoder().decode(ClaudeSettings.self, from: data), errorMessage)
+        } catch {
+            let message = "Failed to load settings: \(error.localizedDescription)"
+            logger.error("Error loading settings: \(error.localizedDescription, privacy: .public)")
+            ErrorHandler.shared.handle(error, context: "Loading Settings")
+            return (nil, message)
+        }
+    }
+
+    private func readStatsCache() -> StatsCache? {
+        guard FileManager.default.fileExists(atPath: statsCachePath.path) else { return nil }
+        guard let data = SecurityValidator.loadSecureData(from: statsCachePath) else { return nil }
+
+        // Try the newer enhanced schema first, then fall back to the older minimal schema.
+        if let enhanced = try? JSONDecoder().decode(EnhancedStatsCache.self, from: data) {
+            let daily: [String: StatsCache.DailyMetric] = Dictionary(
+                uniqueKeysWithValues: enhanced.dailyActivity.map { entry in
+                    (
+                        entry.date,
+                        StatsCache.DailyMetric(
+                            messageCount: entry.messageCount,
+                            sessionCount: entry.sessionCount,
+                            toolCalls: entry.toolCallCount
+                        )
+                    )
+                }
+            )
+
+            return StatsCache(
+                dailyMetrics: daily,
+                totalSessions: enhanced.totalSessions,
+                totalMessages: enhanced.totalMessages
+            )
+        }
+
+        do {
+            return try JSONDecoder().decode(StatsCache.self, from: data)
         } catch {
             logger.error("Error loading stats cache: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 

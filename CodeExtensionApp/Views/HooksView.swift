@@ -133,67 +133,65 @@ struct ExpandableHookCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header (clickable to expand)
-            Button {
+            HStack(spacing: 0) {
+                // Color bar
+                Rectangle()
+                    .fill(color)
+                    .frame(width: 3)
+
+                HStack {
+                    // Expand indicator
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .frame(width: 16)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        // Matcher
+                        if let matcher = config.matcher {
+                            HStack(spacing: 4) {
+                                Text("Matcher:")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                Text(matcher)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .fontWeight(.medium)
+                            }
+                        }
+
+                        // Command count
+                        if let hooks = config.hooks {
+                            Text("\(hooks.count) command(s)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Spacer()
+
+                    // Delete button
+                    Button {
+                        configManager.removeHook(event: hookType, at: index)
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                            .foregroundColor(.red.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(10)
+            }
+            .background(Color(NSColor.controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+            .onTapGesture {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
                     if isExpanded {
                         loadScriptContents()
                     }
                 }
-            } label: {
-                HStack(spacing: 0) {
-                    // Color bar
-                    Rectangle()
-                        .fill(color)
-                        .frame(width: 3)
-
-                    HStack {
-                        // Expand indicator
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                            .frame(width: 16)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            // Matcher
-                            if let matcher = config.matcher {
-                                HStack(spacing: 4) {
-                                    Text("Matcher:")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                    Text(matcher)
-                                        .font(.system(.caption, design: .monospaced))
-                                        .fontWeight(.medium)
-                                }
-                            }
-
-                            // Command count
-                            if let hooks = config.hooks {
-                                Text("\(hooks.count) command(s)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-
-                        Spacer()
-
-                        // Delete button
-                        Button {
-                            configManager.removeHook(event: hookType, at: index)
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.caption)
-                                .foregroundColor(.red.opacity(0.7))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(10)
-                }
-                .background(Color(NSColor.controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
 
             // Expanded content
             if isExpanded {

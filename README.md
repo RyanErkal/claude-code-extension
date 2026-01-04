@@ -65,6 +65,10 @@ Automatically discover projects with Claude Code configurations across your deve
 git clone https://github.com/RyanErkal/claude-code-extension.git
 cd claude-code-extension
 
+# Generate the Xcode project (recommended)
+brew install xcodegen
+xcodegen generate
+
 # Open in Xcode
 open CodeExtensionApp.xcodeproj
 
@@ -94,18 +98,18 @@ The app reads and manages these Claude Code configuration files:
 |------|----------|---------|
 | `settings.json` | `~/.claude/` | Global permissions, hooks, environment |
 | `CLAUDE.md` | `~/.claude/` | Global instructions for Claude |
-| `.mcp.json` | `~/.claude/` | Global MCP server configurations |
+| `.claude.json` | `~/` | Global + per-project MCP server configurations |
 | `settings.local.json` | `project/.claude/` | Project-specific permissions |
-| `.mcp.json` | `project/.claude/` | Project MCP servers |
+| `.mcp.json` | `project/.claude/` | Project MCP servers (legacy/optional) |
 | `SKILL.md` | `~/.claude/skills/*/` | Custom skill definitions |
 
 ### Scan Paths
 
 By default, the app scans `~/Dev/` for projects. To customize:
 
-1. Go to **Local Settings** tab
-2. Click the gear icon
-3. Add or remove scan paths
+1. Go to **Settings → Scan Paths**
+2. Add or remove folders to scan
+3. Open **Projects** to browse discovered configs
 
 ### Auto-Launch
 
